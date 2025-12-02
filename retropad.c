@@ -182,6 +182,13 @@ static int ReplaceAllOccurrences(HWND hwndEdit, const WCHAR *needle, const WCHAR
     }
 
     size_t newLen = (size_t)len - (size_t)count * needleLen + (size_t)count * replLen;
+    if (newLen > INT_MAX / sizeof(WCHAR)) {
+        HeapFree(GetProcessHeap(), 0, text);
+        HeapFree(GetProcessHeap(), 0, searchBuf);
+        HeapFree(GetProcessHeap(), 0, needleBuf);
+        MessageBoxW(NULL, L"Replacement text too large.", L"retropad", MB_ICONERROR);
+        return 0;
+    }
     WCHAR *result = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (newLen + 1) * sizeof(WCHAR));
     if (!result) {
         HeapFree(GetProcessHeap(), 0, text);
