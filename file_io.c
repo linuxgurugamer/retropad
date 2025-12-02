@@ -237,7 +237,7 @@ BOOL SaveFileDialog(HWND owner, WCHAR *pathOut, DWORD pathLen) {
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
     ofn.lpstrDefExt = L"txt";
     if (pathOut[0] == L'\0') {
-        StringCchCopyW(pathOut, pathLen, L"*.txt");
+        StringCchCopyW(pathOut, pathLen, L"Untitled.txt");
     }
     return GetSaveFileNameW(&ofn);
 }
