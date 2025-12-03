@@ -11,7 +11,7 @@ Optional: MinGW-w64 for `make` + `gcc` (a separate POSIX-style `Makefile` is inc
 
 ## Get the code
 ```bat
-git clone https://github.com/your/repo.git retropad
+git clone https://github.com/PlummersSoftwareLLC/retropad.git
 cd retropad
 ```
 
