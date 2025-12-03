@@ -76,7 +76,7 @@ static BOOL FindInEdit(HWND hwndEdit, const WCHAR *needle, BOOL matchCase, BOOL 
     if (!GetEditText(hwndEdit, &text, &len)) return FALSE;
 
     size_t needleLen = wcslen(needle);
-    WCHAR *haystack = text;
+    WCHAR *haystack = NULL;
     WCHAR *needleBuf = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (needleLen + 1) * sizeof(WCHAR));
     if (!needleBuf) {
         HeapFree(GetProcessHeap(), 0, text);
@@ -85,8 +85,17 @@ static BOOL FindInEdit(HWND hwndEdit, const WCHAR *needle, BOOL matchCase, BOOL 
     StringCchCopyW(needleBuf, needleLen + 1, needle);
 
     if (!matchCase) {
+        haystack = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (len + 1) * sizeof(WCHAR));
+        if (!haystack) {
+            HeapFree(GetProcessHeap(), 0, text);
+            HeapFree(GetProcessHeap(), 0, needleBuf);
+            return FALSE;
+        }
+        StringCchCopyW(haystack, len + 1, text);
         CharLowerBuffW(haystack, len);
         CharLowerBuffW(needleBuf, (DWORD)needleLen);
+    } else {
+        haystack = text;
     }
 
     if (startPos > (DWORD)len) startPos = (DWORD)len;
@@ -125,6 +134,9 @@ static BOOL FindInEdit(HWND hwndEdit, const WCHAR *needle, BOOL matchCase, BOOL 
         result = TRUE;
     }
 
+    if (!matchCase && haystack != text) {
+        HeapFree(GetProcessHeap(), 0, haystack);
+    }
     HeapFree(GetProcessHeap(), 0, text);
     HeapFree(GetProcessHeap(), 0, needleBuf);
     return result;
@@ -170,6 +182,13 @@ static int ReplaceAllOccurrences(HWND hwndEdit, const WCHAR *needle, const WCHAR
     }
 
     size_t newLen = (size_t)len - (size_t)count * needleLen + (size_t)count * replLen;
+    if (newLen > INT_MAX / sizeof(WCHAR)) {
+        HeapFree(GetProcessHeap(), 0, text);
+        HeapFree(GetProcessHeap(), 0, searchBuf);
+        HeapFree(GetProcessHeap(), 0, needleBuf);
+        MessageBoxW(NULL, L"Replacement text too large.", L"retropad", MB_ICONERROR);
+        return 0;
+    }
     WCHAR *result = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (newLen + 1) * sizeof(WCHAR));
     if (!result) {
         HeapFree(GetProcessHeap(), 0, text);
