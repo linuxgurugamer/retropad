@@ -152,6 +152,9 @@ static BOOL WriteUTF8WithBOM(HANDLE file, const WCHAR *text, size_t length) {
     if (!WriteFile(file, bom, sizeof(bom), &written, NULL)) {
         return FALSE;
     }
+    // Empty text is valid - just write BOM and return success
+    if (length == 0) return TRUE;
+    
     int bytes = WideCharToMultiByte(CP_UTF8, 0, text, (int)length, NULL, 0, NULL, NULL);
     if (bytes <= 0) return FALSE;
     BYTE *buffer = (BYTE *)HeapAlloc(GetProcessHeap(), 0, bytes);
@@ -172,6 +175,9 @@ static BOOL WriteUTF16LE(HANDLE file, const WCHAR *text, size_t length) {
 }
 
 static BOOL WriteANSI(HANDLE file, const WCHAR *text, size_t length) {
+    // Empty text is valid - just return success
+    if (length == 0) return TRUE;
+    
     int bytes = WideCharToMultiByte(CP_ACP, 0, text, (int)length, NULL, 0, NULL, NULL);
     if (bytes <= 0) return FALSE;
     BYTE *buffer = (BYTE *)HeapAlloc(GetProcessHeap(), 0, bytes);
