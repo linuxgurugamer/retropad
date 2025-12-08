@@ -4,10 +4,10 @@
 
 Build and package a release:
 ```batch
-release-build.bat 1.0.5
+release-build.bat 1.1.0
 ```
 
-This creates `release/retropad-1.0.5.zip` with the executable and documentation.
+This creates `release/retropad-1.1.0.zip` with the executable and documentation.
 
 ---
 
@@ -33,34 +33,34 @@ Edit the following files:
 
 **CMakeLists.txt:**
 ```cmake
-project(retropad VERSION 1.0.5 LANGUAGES C RC)
+project(retropad VERSION 1.1.0 LANGUAGES C RC)
 ```
 
 **version.bat:**
 ```batch
 @set VERSION_MAJOR=1
-@set VERSION_MINOR=0
-@set VERSION_PATCH=1
+@set VERSION_MINOR=1
+@set VERSION_PATCH=0
 ```
 
 **retropad.rc (optional):**
 ```rc
-FILEVERSION 1,0,5,0
-PRODUCTVERSION 1,0,5,0
+FILEVERSION 1,1,0,0
+PRODUCTVERSION 1,1,0,0
 ```
 
 ### 4. Build Release Package
 
 ```batch
-release-build.bat 1.0.5s
+release-build.bat 1.1.0
 ```
 
 The script will:
 - Clean previous builds
 - Build Release configuration (optimized, with debug symbols)
-- Create package directory: `release/retropad-1.0.5/`
+- Create package directory: `release/retropad-1.1.0/`
 - Include: executable, README, LICENSE, RELEASE_NOTES.txt
-- Create ZIP: `release/retropad-1.0.5.zip`
+- Create ZIP: `release/retropad-1.1.0.zip`
 - Generate SHA256 hash for security verification
 
 ### 5. Test Release Package
@@ -70,8 +70,8 @@ The script will:
 REM Extract and test
 mkdir test-release
 cd test-release
-powershell -Command "Expand-Archive '..\release\retropad-1.0.5.zip' ."
-cd retropad-1.0.5
+powershell -Command "Expand-Archive '..\release\retropad-1.1.0.zip' ."
+cd retropad-1.1.0
 retropad.exe
 ```
 
@@ -99,26 +99,26 @@ retropad.exe
 ```batch
 REM Commit release changes
 git add CHANGELOG.md README.md version.bat CMakeLists.txt retropad.rc
-git commit -m "Release: retropad v1.0.5"
+git commit -m "Release: retropad v1.1.0"
 
 REM Create annotated tag
-git tag -a v1.0.1 -m "Release version 1.0.5 - [Brief description]"
+git tag -a v1.1.0 -m "Release version 1.1.0 - [Brief description]"
 
 REM Push to remote
 git push origin main
-git push origin v1.0.1
+git push origin v1.1.0
 ```
 
 ### 7. GitHub Release
 
 1. Go to: https://github.com/Alt3rnativity/retropad/releases
 2. Click "Draft a new release"
-3. **Tag version:** `v1.0.5`
-4. **Release title:** `retropad v1.0.5`
+3. **Tag version:** `v1.1.0`
+4. **Release title:** `retropad v1.1.0`
 5. **Description:** Use CHANGELOG.md entry and release notes
 6. **Attach files:**
-   - `release/retropad-1.0.5.zip`
-   - `release/retropad-1.0.5/RELEASE_NOTES.txt`
+  - `release/retropad-1.1.0.zip`
+  - `release/retropad-1.1.0/RELEASE_NOTES.txt`
 7. **Pre-release?** Check if beta/RC, uncheck for stable
 8. Click "Publish release"
 
@@ -166,12 +166,12 @@ cmake --build . --config Release
 
 ## File Artifacts
 
-After running `release-build.bat 1.0.5`:
+After running `release-build.bat 1.1.0`:
 
 ```
 release/
-├── retropad-1.0.5.zip          ← ZIP package for distribution
-└── retropad-1.0.5/             ← Uncompressed release directory
+├── retropad-1.1.0.zip          ← ZIP package for distribution
+└── retropad-1.1.0/             ← Uncompressed release directory
     ├── retropad.exe            ← Main executable
     ├── README.md               ← Project documentation
     ├── LICENSE                 ← License file
