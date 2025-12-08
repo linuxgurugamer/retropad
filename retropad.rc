@@ -133,13 +133,13 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName", "retropad"
+            VALUE "CompanyName", "Alt3rnativity"
             VALUE "FileDescription", "retropad text editor"
-            VALUE "FileVersion", "1.0.0.0"
+            VALUE "FileVersion", "1.1.0.0"
             VALUE "InternalName", "retropad.exe"
             VALUE "OriginalFilename", "retropad.exe"
             VALUE "ProductName", "retropad"
-            VALUE "ProductVersion", "1.0.0.0"
+            VALUE "ProductVersion", "1.1.0.0"
         END
     END
     BLOCK "VarFileInfo"

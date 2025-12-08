@@ -7,7 +7,7 @@ Welcome to **retropad** - a lightweight, feature-rich text editor for Windows!
 ## Getting Started
 
 ### Installation
-1. Download `retropad-1.0.5.zip`
+1. Download `retropad-1.1.0.zip`
 2. Extract to your desired location (e.g., `C:\Program Files\retropad`)
 3. Run `retropad.exe`
 4. (Optional) Create a Windows Start Menu shortcut
@@ -194,7 +194,7 @@ All settings stored securely in Windows Registry (per-user).
 
 ## System Information
 
-- **Version**: 1.0.5
+- **Version**: 1.1.0
 - **Release Date**: Mon 12/08/2025
 - **Built with**: Visual Studio 2022 MSVC v143
 - **Platform**: Windows (32-bit/64-bit compatible)
