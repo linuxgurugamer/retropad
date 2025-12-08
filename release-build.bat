@@ -1,13 +1,13 @@
 @echo off
 REM Release build and packaging script for retropad
 REM Usage: release-build.bat [version]
-REM Example: release-build.bat 1.0.0
+REM Example: release-build.bat 1.1.0
 
 setlocal enabledelayedexpansion
 
 if "%1"=="" (
     echo Usage: release-build.bat [version]
-    echo Example: release-build.bat 1.0.0
+    echo Example: release-build.bat 1.1.0
     exit /b 1
 )
 
@@ -58,7 +58,7 @@ REM Step 5: Copy support files
 echo  - Copying README from template...
 REM Replace version number and current date in template
 for /f "tokens=1-4 delims=/ " %%a in ('date /t') do (set mydate=%%c/%%a/%%b)
-powershell -NoProfile -Command "((Get-Content 'release\release-notes-template.md') -replace '1\.0\.5', '%VERSION%' -replace '\[DATE\]', '%date%') | Out-File '%RELEASE_DIR%\README.md' -Encoding UTF8"
+powershell -NoProfile -Command "((Get-Content 'release\release-notes-template.md') -replace '1\.1\.0', '%VERSION%' -replace '\[DATE\]', '%date%') | Out-File '%RELEASE_DIR%\README.md' -Encoding UTF8"
 
 echo  - Copying LICENSE (if exists)...
 if exist LICENSE (

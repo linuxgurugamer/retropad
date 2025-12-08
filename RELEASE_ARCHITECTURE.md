@@ -14,9 +14,9 @@
 │                                                                  │
 │  version.bat                  CHANGELOG.md                      │
 │  ┌──────────────────┐        ┌────────────────────────┐         │
-│  │ VERSION_MAJOR=1  │        │ ## [1.0.1] - Date     │         │
-│  │ VERSION_MINOR=0  │        │ ### Added             │         │
-│  │ VERSION_PATCH=1  │        │ - New feature         │         │
+│  │ VERSION_MAJOR=1  │        │ ## [1.1.0] - Date     │         │
+│  │ VERSION_MINOR=1  │        │ ### Added             │         │
+│  │ VERSION_PATCH=0  │        │ - New feature         │         │
 │  │ (Update here)    │        │ ### Fixed             │         │
 │  └──────────────────┘        │ - Bug fix             │         │
 │                              └────────────────────────┘         │
@@ -27,7 +27,7 @@
 │                    BUILD & PACKAGING PROCESS                     │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│   release-build.bat 1.0.1                                       │
+│   release-build.bat 1.1.0                                       │
 │   ┌────────────────────────────────────────────────┐            │
 │   │ 1. Clean previous builds                       │            │
 │   │ 2. Run CMake (Release config)                  │            │
@@ -47,11 +47,11 @@
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  release/                                                        │
-│  ├── retropad-1.0.1.zip            (21 KB)                      │
+│  ├── retropad-1.1.0.zip            (21 KB)                      │
 │  │   ├── retropad.exe               (40 KB)                     │
 │  │   ├── README.md                  (2.6 KB)                    │
 │  │   └── RELEASE_NOTES.txt          (1.5 KB)                    │
-│  ├── retropad-1.0.1/                (unpacked)                  │
+│  ├── retropad-1.1.0/                (unpacked)                  │
 │  │   ├── retropad.exe                                           │
 │  │   ├── README.md                                              │
 │  │   └── RELEASE_NOTES.txt                                      │
@@ -78,7 +78,7 @@
 │                                                                  │
 │  Security Check:                                                │
 │  ┌────────────────────────────────────────────────┐            │
-│  │ certutil -hashfile retropad-1.0.1.zip SHA256  │            │
+│  │ certutil -hashfile retropad-1.1.0.zip SHA256  │            │
 │  │ Compare: ba66a629... (matches release?)       │            │
 │  └────────────────────────────────────────────────┘            │
 │                                                                  │
@@ -89,13 +89,13 @@
 │                     GIT VERSION CONTROL                          │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  git tag -a v1.0.1 -m "Release version 1.0.1"                  │
-│  git push origin v1.0.1                                         │
+│  git tag -a v1.1.0 -m "Release version 1.1.0"                  │
+│  git push origin v1.1.0                                         │
 │                                                                  │
 │  Git History:                                                   │
 │  ├── v1.0.0 (initial release)                                   │
-│  ├── v1.0.1 (bug fixes)                    ← You are here      │
-│  └── v1.1.0 (new features - future)                             │
+│  ├── v1.0.1 (bug fixes)                                         │
+│  └── v1.1.0 (new features)                  ← You are here      │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
                                   │
@@ -106,7 +106,7 @@
 │                                                                  │
 │  GitHub Releases (Primary)                                      │
 │  ├── https://github.com/.../retropad/releases                  │
-│  ├── Attach: retropad-1.0.1.zip                                │
+│  ├── Attach: retropad-1.1.0.zip                                │
 │  ├── Notes: From CHANGELOG.md                                  │
 │  └── Download: ~20KB ZIP                                        │
 │                                                                  │
@@ -133,7 +133,7 @@
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  Installation (Portable):                                       │
-│  1. Download retropad-1.0.1.zip                                │
+│  1. Download retropad-1.1.0.zip                                │
 │  2. Extract to desired location                                │
 │  3. Run retropad.exe                                           │
 │  4. (Optional) Create Start Menu shortcut                      │
@@ -191,12 +191,12 @@ RELEASE_INDEX.md (Master Index)
 ## Build Process Timeline
 
 ```
-Start: release-build.bat 1.0.1
+Start: release-build.bat 1.1.0
 │
 ├─ Step 1: Clean (0.5 sec)
 │  ├ Remove build/ directory
-│  ├ Remove previous release/retropad-1.0.0/
-│  └ Remove previous release/retropad-1.0.0.zip
+│  ├ Remove previous release/retropad-1.1.0/
+│  └ Remove previous release/retropad-1.1.0.zip
 │
 ├─ Step 2: Build (10-15 sec)
 │  ├ CMake configure
@@ -206,14 +206,14 @@ Start: release-build.bat 1.0.1
 │  └ Output: build/bin/Release/retropad.exe (40 KB)
 │
 ├─ Step 3: Package (1-2 sec)
-│  ├ Create release/retropad-1.0.1/ directory
+│  ├ Create release/retropad-1.1.0/ directory
 │  ├ Copy retropad.exe
 │  ├ Copy README.md
 │  ├ Copy LICENSE (if exists)
 │  └ Generate RELEASE_NOTES.txt
 │
 ├─ Step 4: Archive (0.5 sec)
-│  ├ Create ZIP: release/retropad-1.0.1.zip
+│  ├ Create ZIP: release/retropad-1.1.0.zip
 │  └ Size: ~21 KB
 │
 └─ Step 5: Verify (1 sec)
@@ -327,11 +327,11 @@ CI/CD Integration:
 
 ```
 Project: retropad
-Release System Version: 1.0.0
-Status: Production Ready ✅
-
-Files Created:
-├─ Documentation: 6 files (1,500+ lines)
+Release System Version: 1.1.0
+Example Release (v1.1.0):
+└─ Artifacts: Example release v1.1.0
+**Last Updated:** December 8, 2025  
+**System Version:** 1.1.0
 ├─ Scripts: 2 files (100+ lines)
 ├─ Templates: 2 files (80+ lines)
 └─ Artifacts: Example release v1.0.0
@@ -356,4 +356,4 @@ Example Release (v1.0.0):
 ---
 
 **Last Updated:** December 7, 2025  
-**System Version:** 1.0.0
+**System Version:** 1.1.0

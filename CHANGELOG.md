@@ -5,10 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Current Release [1.0.5]
+## Current Release [1.1.0]
 
 ### Added
-- **Dark Mode Support** (v1.0.2-1.0.5):
+- **Dark Mode Support** (v1.0.2-1.1.0):
   - Toggle dark mode theme in Settings dialog (`IDC_SETTINGS_DARKMODE` checkbox)
   - Dark mode colors:
     - Editor background: RGB(30, 30, 30) - dark gray
@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Copyright: (c) 2025 Alt3rnativity
   - Updated system information in README template
 
-- **Enhanced Release Build System** (v1.0.5):
+- **Enhanced Release Build System** (v1.1.0):
   - Release template-based README generation
   - Automatic version number replacement in generated README
   - Automatic release date insertion (`[DATE]` placeholder)
@@ -69,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added dynamic version and date replacement
   - Changed README generation from inline script to template file (`release\release-notes-template.md`)
   - Template preserves user guide content across releases
-  - Automatic placeholder replacement: `1.0.5` → version number, `[DATE]` → current date
+  - Automatic placeholder replacement: `1.1.0` → version number, `[DATE]` → current date
 
 - **README Template Structure**:
   - Comprehensive user guide with sections:
@@ -169,7 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 3. **Build release package:**
    ```batch
-   release-build.bat 1.0.1
+  release-build.bat 1.1.0
    ```
    This script:
    - Cleans previous builds
@@ -186,8 +186,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 5. **Tag release in Git:**
    ```batch
-   git tag -a v1.0.1 -m "Release version 1.0.1"
-   git push origin v1.0.1
+  git tag -a v1.1.0 -m "Release version 1.1.0"
+  git push origin v1.1.0
    ```
 
 6. **Upload to GitHub:**
