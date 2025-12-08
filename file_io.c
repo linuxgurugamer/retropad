@@ -14,7 +14,11 @@ static TextEncoding DetectEncoding(const BYTE *data, DWORD size) {
     if (size >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
         return ENC_UTF8;
     }
-    // Assume UTF-8 if it converts cleanly, else ANSI
+    // Handle empty file
+    if (size == 0) {
+        return ENC_UTF8;
+    }
+    // Try UTF-8 first, fall back to ANSI if invalid
     int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (LPCSTR)data, size, NULL, 0);
     return (wlen > 0) ? ENC_UTF8 : ENC_ANSI;
 }
@@ -240,4 +244,129 @@ BOOL SaveFileDialog(HWND owner, WCHAR *pathOut, DWORD pathLen) {
         StringCchCopyW(pathOut, pathLen, L"*.txt");
     }
     return GetSaveFileNameW(&ofn);
+}
+
+// Settings persistence using Windows Registry
+#define RETROPAD_REG_PATH L"Software\\retropad"
+#define REG_WORDWRAP      L"WordWrap"
+#define REG_STATUSBAR     L"StatusBar"
+#define REG_AUTOSAVE      L"AutosaveEnabled"
+#define REG_AUTOSAVE_INT  L"AutosaveInterval"
+#define REG_DARKMODE      L"DarkMode"
+#define REG_ENCODING      L"Encoding"
+
+// Registry helper functions
+static BOOL RegReadDword(HKEY hKey, LPCWSTR valueName, DWORD *out) {
+    DWORD size = sizeof(DWORD);
+    return RegQueryValueExW(hKey, valueName, NULL, NULL, (LPBYTE)out, &size) == ERROR_SUCCESS;
+}
+
+static BOOL RegWriteDword(HKEY hKey, LPCWSTR valueName, DWORD value) {
+    return RegSetValueExW(hKey, valueName, 0, REG_DWORD, (LPBYTE)&value, sizeof(value)) == ERROR_SUCCESS;
+}
+
+BOOL LoadAppSettings(AppSettings *settings) {
+    if (!settings) return FALSE;
+
+    // Initialize with defaults
+    settings->wordWrap = FALSE;
+    settings->statusVisible = TRUE;
+    settings->autosaveEnabled = FALSE;
+    settings->autosaveInterval = 30;  // 30 seconds default
+    settings->darkModeEnabled = FALSE;
+    settings->encoding = ENC_UTF8;
+    settings->modified = FALSE;
+
+    HKEY hKey = NULL;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, RETROPAD_REG_PATH, 0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+        // Key doesn't exist yet, use defaults
+        return TRUE;
+    }
+
+    // Read all settings using helpers
+    DWORD wordWrap = 0;
+    if (RegReadDword(hKey, REG_WORDWRAP, &wordWrap)) {
+        settings->wordWrap = (wordWrap != 0);
+    }
+
+    DWORD statusBar = 1;
+    if (RegReadDword(hKey, REG_STATUSBAR, &statusBar)) {
+        settings->statusVisible = (statusBar != 0);
+    }
+
+    DWORD autosave = 0;
+    if (RegReadDword(hKey, REG_AUTOSAVE, &autosave)) {
+        settings->autosaveEnabled = (autosave != 0);
+    }
+
+    DWORD interval = 30;
+    if (RegReadDword(hKey, REG_AUTOSAVE_INT, &interval)) {
+        settings->autosaveInterval = interval;
+    }
+
+    DWORD darkMode = 0;
+    if (RegReadDword(hKey, REG_DARKMODE, &darkMode)) {
+        settings->darkModeEnabled = (darkMode != 0);
+    }
+
+    DWORD encoding = ENC_UTF8;
+    if (RegReadDword(hKey, REG_ENCODING, &encoding)) {
+        settings->encoding = (TextEncoding)encoding;
+    }
+
+    RegCloseKey(hKey);
+    return TRUE;
+}
+
+BOOL SaveAppSettings(const AppSettings *settings) {
+    if (!settings) return FALSE;
+
+    HKEY hKey = NULL;
+    DWORD disposition = 0;
+
+    // Create or open the registry key
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, RETROPAD_REG_PATH, 0, NULL, REG_OPTION_NON_VOLATILE, 
+                        KEY_WRITE, NULL, &hKey, &disposition) != ERROR_SUCCESS) {
+        return FALSE;
+    }
+
+    // Write all settings using helpers
+    DWORD wordWrap = settings->wordWrap ? 1 : 0;
+    if (!RegWriteDword(hKey, REG_WORDWRAP, wordWrap)) {
+        RegCloseKey(hKey);
+        return FALSE;
+    }
+
+    DWORD statusBar = settings->statusVisible ? 1 : 0;
+    if (!RegWriteDword(hKey, REG_STATUSBAR, statusBar)) {
+        RegCloseKey(hKey);
+        return FALSE;
+    }
+
+    DWORD autosave = settings->autosaveEnabled ? 1 : 0;
+    if (!RegWriteDword(hKey, REG_AUTOSAVE, autosave)) {
+        RegCloseKey(hKey);
+        return FALSE;
+    }
+
+    DWORD interval = settings->autosaveInterval;
+    if (!RegWriteDword(hKey, REG_AUTOSAVE_INT, interval)) {
+        RegCloseKey(hKey);
+        return FALSE;
+    }
+
+    DWORD darkMode = settings->darkModeEnabled ? 1 : 0;
+    if (!RegWriteDword(hKey, REG_DARKMODE, darkMode)) {
+        RegCloseKey(hKey);
+        return FALSE;
+    }
+
+    DWORD encoding = (DWORD)settings->encoding;
+    if (!RegWriteDword(hKey, REG_ENCODING, encoding)) {
+        RegCloseKey(hKey);
+        return FALSE;
+    }
+
+    RegCloseKey(hKey);
+    return TRUE;
 }
