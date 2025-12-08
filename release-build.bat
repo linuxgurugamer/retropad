@@ -55,40 +55,18 @@ echo  - Copying retropad.exe...
 copy build\bin\Release\retropad.exe %RELEASE_DIR%\
 
 REM Step 5: Copy support files
-echo  - Copying README.md...
-copy README.md %RELEASE_DIR%\
+echo  - Copying README from template...
+REM Replace version number and current date in template
+for /f "tokens=1-4 delims=/ " %%a in ('date /t') do (set mydate=%%c/%%a/%%b)
+powershell -NoProfile -Command "((Get-Content 'release\release-notes-template.md') -replace '1\.0\.5', '%VERSION%' -replace '\[DATE\]', '%date%') | Out-File '%RELEASE_DIR%\README.md' -Encoding UTF8"
 
 echo  - Copying LICENSE (if exists)...
 if exist LICENSE (
     copy LICENSE %RELEASE_DIR%\
 )
 
-REM Step 6: Create release notes
-echo  - Creating release notes...
-(
-    echo # retropad Release v%VERSION%
-    echo.
-    echo **Release Date:** %date%
-    echo.
-    echo ## Installation
-    echo Extract `retropad.exe` and run directly. No installation needed.
-    echo.
-    echo ## Features
-    echo - Classic Win32 Notepad-style interface
-    echo - Find/Replace with case-sensitive matching
-    echo - Multiple encoding support (UTF-8, UTF-16, ANSI)
-    echo - Word wrap toggle
-    echo - Status bar
-    echo - Font customization
-    echo - Settings persistence (Registry)
-    echo - Autosave capability
-    echo.
-    echo ## System Requirements
-    echo - Windows 7 or later
-    echo - Visual Studio 2022 Runtime
-    echo.
-    echo See README.md for more information.
-) > %RELEASE_DIR%\RELEASE_NOTES.txt
+REM Step 6: Create release notes (deprecated, template is now README)
+echo  - Release notes integrated into README.md
 
 REM Step 7: Create ZIP archive
 echo  - Creating ZIP archive...

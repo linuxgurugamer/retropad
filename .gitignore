@@ -23,6 +23,7 @@ release/*
 *.o
 *.a
 *.so
+*.htm
 
 # Visual Studio
 .vs/
@@ -36,6 +37,8 @@ release/*
 *.VC.db
 *.VC.VC.opendb
 .visualstudio/
+UpgradeLog*.htm
+UpgradeLog*.XML
 
 # GitHub
 .github/
