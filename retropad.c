@@ -706,6 +706,19 @@ static void HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
 
     case IDM_FORMAT_WORD_WRAP:
         SetWordWrap(hwnd, !g_app.wordWrap);
+        // Save settings immediately when toggled from menu
+        {
+            AppSettings settings = {
+                g_app.wordWrap,
+                g_app.statusVisible,
+                g_app.autosaveEnabled,
+                g_app.autosaveInterval,
+                g_app.darkModeEnabled,
+                g_app.modified,
+                g_app.encoding
+            };
+            SaveAppSettings(&settings);
+        }
         break;
     case IDM_FORMAT_FONT:
         DoSelectFont(hwnd);
@@ -883,12 +896,12 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_BAR_CLASSES };
         InitCommonControlsEx(&icc);
         CreateEditControl(hwnd);
-        ToggleStatusBar(hwnd, TRUE);
+        ToggleStatusBar(hwnd, g_app.statusVisible);  // Use loaded setting, not hardcoded TRUE
         UpdateTitle(hwnd);
         UpdateStatusBar(hwnd);
         DragAcceptFiles(hwnd, TRUE);
         
-        // Start autosave timer if enabled (loaded from registry)
+        // Start autosave timer if enabled (loaded from settings)
         if (g_app.autosaveEnabled) {
             g_app.autosaveTimer = (UINT)SetTimer(hwnd, 1, g_app.autosaveInterval * 1000, NULL);
         }

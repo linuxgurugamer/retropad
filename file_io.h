@@ -16,7 +16,7 @@ BOOL SaveFileDialog(HWND owner, WCHAR *pathOut, DWORD pathLen);
 BOOL LoadTextFile(HWND owner, LPCWSTR path, WCHAR **textOut, size_t *lengthOut, TextEncoding *encodingOut);
 BOOL SaveTextFile(HWND owner, LPCWSTR path, LPCWSTR text, size_t length, TextEncoding encoding);
 
-// Settings persistence (registry-based)
+// Settings persistence (JSON file in AppData)
 typedef struct AppSettings {
     BOOL wordWrap;
     BOOL statusVisible;
