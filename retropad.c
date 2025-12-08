@@ -9,11 +9,24 @@
 #include "resource.h"
 #include "file_io.h"
 
+// Suppress unused parameter warnings (common in callback functions)
+#pragma warning(disable: 4100)
+
+// Windows 10+ dark mode support
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+
+// DwmSetWindowAttribute function pointer
+typedef HRESULT (WINAPI* DwmSetWindowAttributeFunc)(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute);
+static DwmSetWindowAttributeFunc pDwmSetWindowAttribute = NULL;
+
 #define APP_TITLE      L"retropad"
 #define UNTITLED_NAME  L"Untitled"
 #define MAX_PATH_BUFFER 1024
 #define DEFAULT_WIDTH  640
 #define DEFAULT_HEIGHT 480
+#define WM_CTLCOLEREDIT 0x0019
+#define AppMessageBox(msg, type) MessageBoxW(g_app.hwndMain, (msg), APP_TITLE, (type))
 
 typedef struct AppState {
     HWND hwndMain;
@@ -25,6 +38,10 @@ typedef struct AppState {
     BOOL statusVisible;
     BOOL statusBeforeWrap;
     BOOL modified;
+    BOOL autosaveEnabled;
+    DWORD autosaveInterval;
+    UINT autosaveTimer;
+    BOOL darkModeEnabled;
     TextEncoding encoding;
     FINDREPLACEW find;
     HWND hFindDlg;
@@ -37,6 +54,12 @@ typedef struct AppState {
 static AppState g_app = {0};
 static HINSTANCE g_hInst = NULL;
 static UINT g_findMsg = 0;
+
+// Dark mode colors
+static HBRUSH g_darkBkBrush = NULL;
+static HBRUSH g_lightBkBrush = NULL;
+static HBRUSH g_darkStatusBrush = NULL;
+static HBRUSH g_lightStatusBrush = NULL;
 
 static void UpdateTitle(HWND hwnd);
 static void CreateEditControl(HWND hwnd);
@@ -57,6 +80,7 @@ static void HandleFindReplace(LPFINDREPLACE lpfr);
 static BOOL LoadDocumentFromPath(HWND hwnd, LPCWSTR path);
 static INT_PTR CALLBACK GoToDlgProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);
 static INT_PTR CALLBACK AboutDlgProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);
+static INT_PTR CALLBACK SettingsDlgProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static BOOL GetEditText(HWND hwndEdit, WCHAR **bufferOut, int *lengthOut) {
     int length = GetWindowTextLengthW(hwndEdit);
@@ -68,6 +92,32 @@ static BOOL GetEditText(HWND hwndEdit, WCHAR **bufferOut, int *lengthOut) {
     return TRUE;
 }
 
+static BOOL PrepareSearchBuffers(const WCHAR *text, int textLen, const WCHAR *needle,
+                                  WCHAR **outHaystack, WCHAR **outNeedle, size_t *outNeedleLen, BOOL matchCase) {
+    size_t needleLen = wcslen(needle);
+    WCHAR *haystack = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (textLen + 1) * sizeof(WCHAR));
+    WCHAR *needleBuf = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (needleLen + 1) * sizeof(WCHAR));
+    
+    if (!haystack || !needleBuf) {
+        if (haystack) HeapFree(GetProcessHeap(), 0, haystack);
+        if (needleBuf) HeapFree(GetProcessHeap(), 0, needleBuf);
+        return FALSE;
+    }
+    
+    StringCchCopyW(haystack, textLen + 1, text);
+    StringCchCopyW(needleBuf, needleLen + 1, needle);
+    
+    if (!matchCase) {
+        CharLowerBuffW(haystack, textLen);
+        CharLowerBuffW(needleBuf, (DWORD)needleLen);
+    }
+    
+    *outHaystack = haystack;
+    *outNeedle = needleBuf;
+    *outNeedleLen = needleLen;
+    return TRUE;
+}
+
 static BOOL FindInEdit(HWND hwndEdit, const WCHAR *needle, BOOL matchCase, BOOL searchDown, DWORD startPos, DWORD *outStart, DWORD *outEnd) {
     if (!needle || needle[0] == L'\0') return FALSE;
 
@@ -75,18 +125,13 @@ static BOOL FindInEdit(HWND hwndEdit, const WCHAR *needle, BOOL matchCase, BOOL 
     int len = 0;
     if (!GetEditText(hwndEdit, &text, &len)) return FALSE;
 
-    size_t needleLen = wcslen(needle);
-    WCHAR *haystack = text;
-    WCHAR *needleBuf = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (needleLen + 1) * sizeof(WCHAR));
-    if (!needleBuf) {
+    WCHAR *haystack = NULL;
+    WCHAR *needleBuf = NULL;
+    size_t needleLen = 0;
+    
+    if (!PrepareSearchBuffers(text, len, needle, &haystack, &needleBuf, &needleLen, matchCase)) {
         HeapFree(GetProcessHeap(), 0, text);
         return FALSE;
-    }
-    StringCchCopyW(needleBuf, needleLen + 1, needle);
-
-    if (!matchCase) {
-        CharLowerBuffW(haystack, len);
-        CharLowerBuffW(needleBuf, (DWORD)needleLen);
     }
 
     if (startPos > (DWORD)len) startPos = (DWORD)len;
@@ -137,23 +182,14 @@ static int ReplaceAllOccurrences(HWND hwndEdit, const WCHAR *needle, const WCHAR
     int len = 0;
     if (!GetEditText(hwndEdit, &text, &len)) return 0;
 
-    size_t needleLen = wcslen(needle);
     size_t replLen = replacement ? wcslen(replacement) : 0;
-
-    WCHAR *searchBuf = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (len + 1) * sizeof(WCHAR));
-    WCHAR *needleBuf = (WCHAR *)HeapAlloc(GetProcessHeap(), 0, (needleLen + 1) * sizeof(WCHAR));
-    if (!searchBuf || !needleBuf) {
+    WCHAR *searchBuf = NULL;
+    WCHAR *needleBuf = NULL;
+    size_t needleLen = 0;
+    
+    if (!PrepareSearchBuffers(text, len, needle, &searchBuf, &needleBuf, &needleLen, matchCase)) {
         HeapFree(GetProcessHeap(), 0, text);
-        if (searchBuf) HeapFree(GetProcessHeap(), 0, searchBuf);
-        if (needleBuf) HeapFree(GetProcessHeap(), 0, needleBuf);
         return 0;
-    }
-    StringCchCopyW(searchBuf, len + 1, text);
-    StringCchCopyW(needleBuf, needleLen + 1, needle);
-
-    if (!matchCase) {
-        CharLowerBuffW(searchBuf, len);
-        CharLowerBuffW(needleBuf, (DWORD)needleLen);
     }
 
     int count = 0;
@@ -406,19 +442,28 @@ static void UpdateStatusBar(HWND hwnd) {
     SendMessageW(g_app.hwndStatus, SB_SETTEXT, 0, (LPARAM)status);
 }
 
+static void InitializeFindReplace(HWND hwnd, BOOL isReplace) {
+    ZeroMemory(&g_app.find, sizeof(g_app.find));
+    g_app.find.lStructSize = sizeof(FINDREPLACEW);
+    g_app.find.hwndOwner = hwnd;
+    g_app.find.lpstrFindWhat = g_app.findText;
+    g_app.find.wFindWhatLen = ARRAYSIZE(g_app.findText);
+    
+    if (isReplace) {
+        g_app.find.lpstrReplaceWith = g_app.replaceText;
+        g_app.find.wReplaceWithLen = ARRAYSIZE(g_app.replaceText);
+    }
+    
+    g_app.find.Flags = g_app.findFlags;
+}
+
 static void ShowFindDialog(HWND hwnd) {
     if (g_app.hFindDlg) {
         SetForegroundWindow(g_app.hFindDlg);
         return;
     }
 
-    ZeroMemory(&g_app.find, sizeof(g_app.find));
-    g_app.find.lStructSize = sizeof(FINDREPLACEW);
-    g_app.find.hwndOwner = hwnd;
-    g_app.find.lpstrFindWhat = g_app.findText;
-    g_app.find.wFindWhatLen = ARRAYSIZE(g_app.findText);
-    g_app.find.Flags = g_app.findFlags;
-
+    InitializeFindReplace(hwnd, FALSE);
     g_app.hFindDlg = FindTextW(&g_app.find);
 }
 
@@ -428,15 +473,7 @@ static void ShowReplaceDialog(HWND hwnd) {
         return;
     }
 
-    ZeroMemory(&g_app.find, sizeof(g_app.find));
-    g_app.find.lStructSize = sizeof(FINDREPLACEW);
-    g_app.find.hwndOwner = hwnd;
-    g_app.find.lpstrFindWhat = g_app.findText;
-    g_app.find.lpstrReplaceWith = g_app.replaceText;
-    g_app.find.wFindWhatLen = ARRAYSIZE(g_app.findText);
-    g_app.find.wReplaceWithLen = ARRAYSIZE(g_app.replaceText);
-    g_app.find.Flags = g_app.findFlags;
-
+    InitializeFindReplace(hwnd, TRUE);
     g_app.hReplaceDlg = ReplaceTextW(&g_app.find);
 }
 
@@ -622,6 +659,9 @@ static void HandleCommand(HWND hwnd, WPARAM wParam, LPARAM lParam) {
     case IDM_FILE_PRINT:
         MessageBoxW(hwnd, L"Printing is not implemented in retropad.", APP_TITLE, MB_ICONINFORMATION);
         break;
+    case IDM_FILE_SETTINGS:
+        DialogBoxW(g_hInst, MAKEINTRESOURCE(IDD_SETTINGS), hwnd, SettingsDlgProc);
+        break;
     case IDM_FILE_EXIT:
         PostMessageW(hwnd, WM_CLOSE, 0, 0);
         break;
@@ -698,6 +738,140 @@ static INT_PTR CALLBACK AboutDlgProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM l
     return FALSE;
 }
 
+static void ApplyAutosaveSettings(DWORD newInterval, BOOL enabled) {
+    // Validate interval (at least 5 seconds, max 1 hour)
+    if (newInterval < 5) newInterval = 5;
+    if (newInterval > 3600) newInterval = 3600;
+    
+    g_app.autosaveEnabled = enabled;
+    g_app.autosaveInterval = newInterval;
+    
+    // Kill old timer if exists
+    if (g_app.autosaveTimer) {
+        KillTimer(g_app.hwndMain, g_app.autosaveTimer);
+        g_app.autosaveTimer = 0;
+    }
+    
+    // Create new timer if autosave enabled
+    if (g_app.autosaveEnabled && g_app.currentPath[0]) {
+        g_app.autosaveTimer = (UINT)SetTimer(g_app.hwndMain, 1, g_app.autosaveInterval * 1000, NULL);
+    }
+}
+
+static INT_PTR CALLBACK SettingsDlgProc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_INITDIALOG: {
+        // Set word wrap checkbox
+        CheckDlgButton(dlg, IDC_SETTINGS_WORDWRAP, g_app.wordWrap ? BST_CHECKED : BST_UNCHECKED);
+        // Set status bar checkbox
+        CheckDlgButton(dlg, IDC_SETTINGS_STATUSBAR, g_app.statusVisible ? BST_CHECKED : BST_UNCHECKED);
+        // Set autosave checkbox
+        CheckDlgButton(dlg, IDC_SETTINGS_AUTOSAVE, g_app.autosaveEnabled ? BST_CHECKED : BST_UNCHECKED);
+        // Set dark mode checkbox
+        CheckDlgButton(dlg, IDC_SETTINGS_DARKMODE, g_app.darkModeEnabled ? BST_CHECKED : BST_UNCHECKED);
+        // Set autosave interval
+        SetDlgItemInt(dlg, IDC_SETTINGS_AUTOSAVE_INTERVAL, g_app.autosaveInterval, FALSE);
+        
+        // Populate font names
+        HWND fontCombo = GetDlgItem(dlg, IDC_SETTINGS_FONT_NAME);
+        SendMessageW(fontCombo, CB_ADDSTRING, 0, (LPARAM)L"Courier New");
+        SendMessageW(fontCombo, CB_ADDSTRING, 0, (LPARAM)L"Arial");
+        SendMessageW(fontCombo, CB_ADDSTRING, 0, (LPARAM)L"Times New Roman");
+        SendMessageW(fontCombo, CB_ADDSTRING, 0, (LPARAM)L"Consolas");
+        SendMessageW(fontCombo, CB_SETCURSEL, 0, 0);
+        
+        // Populate font sizes
+        HWND sizeCombo = GetDlgItem(dlg, IDC_SETTINGS_FONT_SIZE);
+        const int sizes[] = {8, 10, 11, 12, 14, 16, 18, 20, 24};
+        WCHAR sizeStr[16];
+        for (int i = 0; i < ARRAYSIZE(sizes); i++) {
+            StringCchPrintfW(sizeStr, ARRAYSIZE(sizeStr), L"%d", sizes[i]);
+            SendMessageW(sizeCombo, CB_ADDSTRING, 0, (LPARAM)sizeStr);
+        }
+        SendMessageW(sizeCombo, CB_SETCURSEL, 3, 0); // Default 12pt
+        
+        return TRUE;
+    }
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDOK: {
+            // Apply settings
+            BOOL newWordWrap = IsDlgButtonChecked(dlg, IDC_SETTINGS_WORDWRAP) == BST_CHECKED;
+            BOOL newStatusBar = IsDlgButtonChecked(dlg, IDC_SETTINGS_STATUSBAR) == BST_CHECKED;
+            BOOL newAutosave = IsDlgButtonChecked(dlg, IDC_SETTINGS_AUTOSAVE) == BST_CHECKED;
+            BOOL newDarkMode = IsDlgButtonChecked(dlg, IDC_SETTINGS_DARKMODE) == BST_CHECKED;
+            DWORD newInterval = GetDlgItemInt(dlg, IDC_SETTINGS_AUTOSAVE_INTERVAL, NULL, FALSE);
+            
+            if (newWordWrap != g_app.wordWrap) {
+                SetWordWrap(g_app.hwndMain, newWordWrap);
+            }
+            if (newStatusBar != g_app.statusVisible) {
+                ToggleStatusBar(g_app.hwndMain, newStatusBar);
+            }
+            
+            // Apply dark mode if changed
+            if (newDarkMode != g_app.darkModeEnabled) {
+                g_app.darkModeEnabled = newDarkMode;
+                
+                // Apply dark mode to window frame (Windows 10+)
+                if (pDwmSetWindowAttribute) {
+                    BOOL darkMode = newDarkMode ? TRUE : FALSE;
+                    pDwmSetWindowAttribute(g_app.hwndMain, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
+                }
+                
+                // Recreate brushes and force repaint
+                if (g_darkBkBrush) {
+                    DeleteObject(g_darkBkBrush);
+                    g_darkBkBrush = NULL;
+                }
+                if (g_lightBkBrush) {
+                    DeleteObject(g_lightBkBrush);
+                    g_lightBkBrush = NULL;
+                }
+                if (g_darkStatusBrush) {
+                    DeleteObject(g_darkStatusBrush);
+                    g_darkStatusBrush = NULL;
+                }
+                if (g_lightStatusBrush) {
+                    DeleteObject(g_lightStatusBrush);
+                    g_lightStatusBrush = NULL;
+                }
+                // Recreate edit control to apply new colors
+                CreateEditControl(g_app.hwndMain);
+                // Force full window repaint including non-client area
+                InvalidateRect(g_app.hwndMain, NULL, TRUE);
+                InvalidateRect(g_app.hwndStatus, NULL, TRUE);
+                UpdateWindow(g_app.hwndMain);
+                if (g_app.hwndStatus) UpdateWindow(g_app.hwndStatus);
+            }
+            
+            // Apply autosave settings (includes timer management)
+            ApplyAutosaveSettings(newInterval, newAutosave);
+            
+            // Save settings to registry
+            AppSettings settings = {
+                g_app.wordWrap,
+                g_app.statusVisible,
+                g_app.autosaveEnabled,
+                g_app.autosaveInterval,
+                g_app.darkModeEnabled,
+                g_app.modified,
+                g_app.encoding
+            };
+            SaveAppSettings(&settings);
+            
+            EndDialog(dlg, IDOK);
+            return TRUE;
+        }
+        case IDCANCEL:
+            EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
 static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == g_findMsg) {
         HandleFindReplace((LPFINDREPLACE)lParam);
@@ -722,6 +896,64 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         UpdateLayout(hwnd);
         UpdateStatusBar(hwnd);
         return 0;
+    case WM_ERASEBKGND:
+        if (g_app.darkModeEnabled) {
+            // Paint dark background
+            HDC hdc = (HDC)wParam;
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            HBRUSH hBrush = CreateSolidBrush(RGB(30, 30, 30));
+            FillRect(hdc, &rc, hBrush);
+            DeleteObject(hBrush);
+            return 1;  // We handled it
+        }
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    case WM_TIMER:
+        // Autosave timer
+        if (wParam == g_app.autosaveTimer && g_app.modified && g_app.currentPath[0]) {
+            DoFileSave(hwnd, FALSE);
+        }
+        return 0;
+    case WM_CTLCOLOREDIT:
+        if (g_app.darkModeEnabled) {
+            // Dark mode: light text on dark background
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, RGB(230, 230, 230));     // Light gray text
+            SetBkColor(hdc, RGB(30, 30, 30));          // Dark gray background
+            if (!g_darkBkBrush) {
+                g_darkBkBrush = CreateSolidBrush(RGB(30, 30, 30));
+            }
+            return (LRESULT)g_darkBkBrush;
+        } else {
+            // Light mode: dark text on light background
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, RGB(0, 0, 0));           // Black text
+            SetBkColor(hdc, RGB(255, 255, 255));       // White background
+            if (!g_lightBkBrush) {
+                g_lightBkBrush = CreateSolidBrush(RGB(255, 255, 255));
+            }
+            return (LRESULT)g_lightBkBrush;
+        }
+    case WM_CTLCOLORSTATIC:
+        if (g_app.darkModeEnabled) {
+            // Dark mode for status bar and other static controls
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, RGB(230, 230, 230));     // Light gray text
+            SetBkColor(hdc, RGB(30, 30, 30));          // Dark gray background
+            if (!g_darkStatusBrush) {
+                g_darkStatusBrush = CreateSolidBrush(RGB(30, 30, 30));
+            }
+            return (LRESULT)g_darkStatusBrush;
+        } else {
+            // Light mode
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, RGB(0, 0, 0));           // Black text
+            SetBkColor(hdc, RGB(240, 240, 240));       // Light gray background
+            if (!g_lightStatusBrush) {
+                g_lightStatusBrush = CreateSolidBrush(RGB(240, 240, 240));
+            }
+            return (LRESULT)g_lightStatusBrush;
+        }
     case WM_DROPFILES: {
         HDROP hDrop = (HDROP)wParam;
         WCHAR path[MAX_PATH_BUFFER];
@@ -750,10 +982,29 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         return 0;
     case WM_CLOSE:
         if (PromptSaveChanges(hwnd)) {
+            // Kill autosave timer
+            if (g_app.autosaveTimer) {
+                KillTimer(hwnd, g_app.autosaveTimer);
+                g_app.autosaveTimer = 0;
+            }
+            // Save settings to registry before closing
+            AppSettings settings = {
+                g_app.wordWrap,
+                g_app.statusVisible,
+                g_app.autosaveEnabled,
+                g_app.autosaveInterval,
+                g_app.modified,
+                g_app.encoding
+            };
+            SaveAppSettings(&settings);
             DestroyWindow(hwnd);
         }
         return 0;
     case WM_DESTROY:
+        if (g_darkBkBrush) DeleteObject(g_darkBkBrush);
+        if (g_lightBkBrush) DeleteObject(g_lightBkBrush);
+        if (g_darkStatusBrush) DeleteObject(g_darkStatusBrush);
+        if (g_lightStatusBrush) DeleteObject(g_lightStatusBrush);
         PostQuitMessage(0);
         return 0;
     }
@@ -766,11 +1017,32 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
     g_hInst = hInstance;
     g_findMsg = RegisterWindowMessageW(FINDMSGSTRINGW);
+    
+    // Try to load DwmSetWindowAttribute for dark mode support (Windows 10+)
+    HMODULE hDwmApi = LoadLibraryW(L"dwmapi.dll");
+    if (hDwmApi) {
+        pDwmSetWindowAttribute = (DwmSetWindowAttributeFunc)GetProcAddress(hDwmApi, "DwmSetWindowAttribute");
+    }
+    
     g_app.wordWrap = FALSE;
     g_app.statusVisible = TRUE;
     g_app.statusBeforeWrap = TRUE;
+    g_app.autosaveEnabled = FALSE;
+    g_app.autosaveInterval = 30;
+    g_app.autosaveTimer = 0;
     g_app.encoding = ENC_UTF8;
     g_app.findFlags = FR_DOWN;
+
+    // Load settings from registry
+    AppSettings settings = {0};
+    if (LoadAppSettings(&settings)) {
+        g_app.wordWrap = settings.wordWrap;
+        g_app.statusVisible = settings.statusVisible;
+        g_app.autosaveEnabled = settings.autosaveEnabled;
+        g_app.autosaveInterval = settings.autosaveInterval;
+        g_app.darkModeEnabled = settings.darkModeEnabled;
+        g_app.encoding = settings.encoding;
+    }
 
     WNDCLASSEXW wc = {0};
     wc.cbSize = sizeof(wc);
@@ -798,6 +1070,13 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
     }
 
     g_app.hwndMain = hwnd;
+    
+    // Apply dark mode to window if enabled and DwmSetWindowAttribute is available
+    if (pDwmSetWindowAttribute && g_app.darkModeEnabled) {
+        BOOL darkMode = TRUE;
+        pDwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkMode, sizeof(darkMode));
+    }
+    
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
 

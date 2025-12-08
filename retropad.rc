@@ -15,6 +15,8 @@ BEGIN
         MENUITEM "Page Set&up...",          IDM_FILE_PAGE_SETUP
         MENUITEM "&Print...\tCtrl+P",       IDM_FILE_PRINT
         MENUITEM SEPARATOR
+        MENUITEM "&Settings...",            IDM_FILE_SETTINGS
+        MENUITEM SEPARATOR
         MENUITEM "E&xit",                   IDM_FILE_EXIT
     END
     POPUP "&Edit"
@@ -50,23 +52,24 @@ BEGIN
     END
 END
 
+// Hex codes: 0x4E=N, 0x4F=O, 0x53=S, 0x50=P, 0x5A=Z, 0x58=X, 0x43=C, 0x56=V, 0x2E=Del, 0x46=F, 0x48=H, 0x47=G, 0x41=A
 IDC_RETROPAD ACCELERATORS
 BEGIN
-    "^N",       IDM_FILE_NEW,       VIRTKEY, CONTROL
-    "^O",       IDM_FILE_OPEN,      VIRTKEY, CONTROL
-    "^S",       IDM_FILE_SAVE,      VIRTKEY, CONTROL
-    "^P",       IDM_FILE_PRINT,     VIRTKEY, CONTROL
-    "^Z",       IDM_EDIT_UNDO,      VIRTKEY, CONTROL
-    "^X",       IDM_EDIT_CUT,       VIRTKEY, CONTROL
-    "^C",       IDM_EDIT_COPY,      VIRTKEY, CONTROL
-    "^V",       IDM_EDIT_PASTE,     VIRTKEY, CONTROL
-    VK_DELETE,  IDM_EDIT_DELETE,    VIRTKEY
-    "^F",       IDM_EDIT_FIND,      VIRTKEY, CONTROL
-    VK_F3,      IDM_EDIT_FIND_NEXT, VIRTKEY
-    "^H",       IDM_EDIT_REPLACE,   VIRTKEY, CONTROL
-    "^G",       IDM_EDIT_GOTO,      VIRTKEY, CONTROL
-    "^A",       IDM_EDIT_SELECT_ALL,VIRTKEY, CONTROL
-    VK_F5,      IDM_EDIT_TIME_DATE, VIRTKEY
+    0x4E,       IDM_FILE_NEW,       VIRTKEY, CONTROL  // Ctrl+N - New file
+    0x4F,       IDM_FILE_OPEN,      VIRTKEY, CONTROL  // Ctrl+O - Open file
+    0x53,       IDM_FILE_SAVE,      VIRTKEY, CONTROL  // Ctrl+S - Save file
+    0x50,       IDM_FILE_PRINT,     VIRTKEY, CONTROL  // Ctrl+P - Print
+    0x5A,       IDM_EDIT_UNDO,      VIRTKEY, CONTROL  // Ctrl+Z - Undo
+    0x58,       IDM_EDIT_CUT,       VIRTKEY, CONTROL  // Ctrl+X - Cut
+    0x43,       IDM_EDIT_COPY,      VIRTKEY, CONTROL  // Ctrl+C - Copy
+    0x56,       IDM_EDIT_PASTE,     VIRTKEY, CONTROL  // Ctrl+V - Paste
+    0x2E,       IDM_EDIT_DELETE,    VIRTKEY           // Delete - Delete selected text
+    0x46,       IDM_EDIT_FIND,      VIRTKEY, CONTROL  // Ctrl+F - Find
+    0x72,       IDM_EDIT_FIND_NEXT, VIRTKEY           // F3 - Find next
+    0x48,       IDM_EDIT_REPLACE,   VIRTKEY, CONTROL  // Ctrl+H - Replace
+    0x47,       IDM_EDIT_GOTO,      VIRTKEY, CONTROL  // Ctrl+G - Go to line
+    0x41,       IDM_EDIT_SELECT_ALL,VIRTKEY, CONTROL  // Ctrl+A - Select all
+    0x74,       IDM_EDIT_TIME_DATE, VIRTKEY           // F4 - Insert time/date
 END
 
 IDD_GOTO DIALOGEX 0, 0, 200, 80
@@ -78,6 +81,29 @@ BEGIN
     EDITTEXT        IDC_GOTO_EDIT, 80, 10, 100, 14, ES_NUMBER | ES_AUTOHSCROLL
     DEFPUSHBUTTON   "OK", IDOK, 60, 44, 50, 14
     PUSHBUTTON      "Cancel", IDCANCEL, 120, 44, 50, 14
+END
+
+IDD_SETTINGS DIALOGEX 0, 0, 280, 220
+STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
+CAPTION "Settings"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    GROUPBOX        "Editor Options", -1, 10, 10, 260, 105
+    AUTOCHECKBOX    "&Enable Word Wrap", IDC_SETTINGS_WORDWRAP, 20, 25, 130, 12
+    AUTOCHECKBOX    "Show &Status Bar", IDC_SETTINGS_STATUSBAR, 20, 42, 130, 12
+    AUTOCHECKBOX    "&Enable AutoSave", IDC_SETTINGS_AUTOSAVE, 20, 59, 130, 12
+    LTEXT           "Interval (seconds):", -1, 40, 76, 80, 10
+    EDITTEXT        IDC_SETTINGS_AUTOSAVE_INTERVAL, 130, 74, 40, 12, ES_NUMBER | ES_AUTOHSCROLL
+    AUTOCHECKBOX    "&Dark Mode", IDC_SETTINGS_DARKMODE, 20, 93, 130, 12
+    
+    GROUPBOX        "Font Settings", -1, 10, 120, 260, 70
+    LTEXT           "Font:", -1, 20, 135, 30, 10
+    COMBOBOX        IDC_SETTINGS_FONT_NAME, 55, 133, 200, 50, CBS_DROPDOWNLIST | WS_VSCROLL
+    LTEXT           "Size:", -1, 20, 155, 30, 10
+    COMBOBOX        IDC_SETTINGS_FONT_SIZE, 55, 153, 100, 50, CBS_DROPDOWNLIST | WS_VSCROLL
+    
+    DEFPUSHBUTTON   "OK", IDOK, 110, 195, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 170, 195, 50, 14
 END
 
 IDD_ABOUT DIALOGEX 0, 0, 200, 92

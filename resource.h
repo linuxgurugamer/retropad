@@ -12,6 +12,7 @@
 #define IDM_FILE_SAVE_AS        40004
 #define IDM_FILE_PAGE_SETUP     40005
 #define IDM_FILE_PRINT          40006
+#define IDM_FILE_SETTINGS       40008
 #define IDM_FILE_EXIT           40007
 
 #define IDM_EDIT_UNDO           40010
@@ -37,5 +38,13 @@
 // Dialogs and controls
 #define IDD_GOTO                50001
 #define IDD_ABOUT               50002
+#define IDD_SETTINGS            50003
 #define IDC_GOTO_EDIT           50010
+#define IDC_SETTINGS_WORDWRAP   50020
+#define IDC_SETTINGS_STATUSBAR  50021
+#define IDC_SETTINGS_FONT_NAME  50022
+#define IDC_SETTINGS_FONT_SIZE  50023
+#define IDC_SETTINGS_AUTOSAVE   50024
+#define IDC_SETTINGS_AUTOSAVE_INTERVAL 50025
+#define IDC_SETTINGS_DARKMODE   50026
 
