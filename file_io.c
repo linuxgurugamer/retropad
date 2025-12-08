@@ -3,6 +3,8 @@
 #include <commdlg.h>
 #include <strsafe.h>
 #include <stdlib.h>
+#include <shlobj.h>
+#include <string.h>
 
 static TextEncoding DetectEncoding(const BYTE *data, DWORD size) {
     if (size >= 2 && data[0] == 0xFF && data[1] == 0xFE) {
@@ -152,6 +154,9 @@ static BOOL WriteUTF8WithBOM(HANDLE file, const WCHAR *text, size_t length) {
     if (!WriteFile(file, bom, sizeof(bom), &written, NULL)) {
         return FALSE;
     }
+    // Empty text is valid - just write BOM and return success
+    if (length == 0) return TRUE;
+    
     int bytes = WideCharToMultiByte(CP_UTF8, 0, text, (int)length, NULL, 0, NULL, NULL);
     if (bytes <= 0) return FALSE;
     BYTE *buffer = (BYTE *)HeapAlloc(GetProcessHeap(), 0, bytes);
@@ -172,6 +177,9 @@ static BOOL WriteUTF16LE(HANDLE file, const WCHAR *text, size_t length) {
 }
 
 static BOOL WriteANSI(HANDLE file, const WCHAR *text, size_t length) {
+    // Empty text is valid - just return success
+    if (length == 0) return TRUE;
+    
     int bytes = WideCharToMultiByte(CP_ACP, 0, text, (int)length, NULL, 0, NULL, NULL);
     if (bytes <= 0) return FALSE;
     BYTE *buffer = (BYTE *)HeapAlloc(GetProcessHeap(), 0, bytes);
@@ -246,23 +254,23 @@ BOOL SaveFileDialog(HWND owner, WCHAR *pathOut, DWORD pathLen) {
     return GetSaveFileNameW(&ofn);
 }
 
-// Settings persistence using Windows Registry
-#define RETROPAD_REG_PATH L"Software\\retropad"
-#define REG_WORDWRAP      L"WordWrap"
-#define REG_STATUSBAR     L"StatusBar"
-#define REG_AUTOSAVE      L"AutosaveEnabled"
-#define REG_AUTOSAVE_INT  L"AutosaveInterval"
-#define REG_DARKMODE      L"DarkMode"
-#define REG_ENCODING      L"Encoding"
-
-// Registry helper functions
-static BOOL RegReadDword(HKEY hKey, LPCWSTR valueName, DWORD *out) {
-    DWORD size = sizeof(DWORD);
-    return RegQueryValueExW(hKey, valueName, NULL, NULL, (LPBYTE)out, &size) == ERROR_SUCCESS;
-}
-
-static BOOL RegWriteDword(HKEY hKey, LPCWSTR valueName, DWORD value) {
-    return RegSetValueExW(hKey, valueName, 0, REG_DWORD, (LPBYTE)&value, sizeof(value)) == ERROR_SUCCESS;
+// Settings persistence using JSON file in AppData
+// Helper to get settings file path in %APPDATA%\retropad\settings.json
+static BOOL GetSettingsPath(WCHAR *pathOut, DWORD pathLen) {
+    // Get %APPDATA% path
+    WCHAR appdata[MAX_PATH];
+    if (FAILED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
+        return FALSE;
+    }
+    
+    // Create retropad directory
+    WCHAR retropadDir[MAX_PATH];
+    StringCchPrintfW(retropadDir, MAX_PATH, L"%s\\retropad", appdata);
+    CreateDirectoryW(retropadDir, NULL);  // Create if doesn't exist (ignore error if exists)
+    
+    // Build settings file path
+    StringCchPrintfW(pathOut, pathLen, L"%s\\settings.json", retropadDir);
+    return TRUE;
 }
 
 BOOL LoadAppSettings(AppSettings *settings) {
@@ -277,96 +285,137 @@ BOOL LoadAppSettings(AppSettings *settings) {
     settings->encoding = ENC_UTF8;
     settings->modified = FALSE;
 
-    HKEY hKey = NULL;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, RETROPAD_REG_PATH, 0, KEY_READ, &hKey) != ERROR_SUCCESS) {
-        // Key doesn't exist yet, use defaults
+    WCHAR settingsPath[MAX_PATH];
+    if (!GetSettingsPath(settingsPath, MAX_PATH)) {
+        return TRUE;  // Use defaults
+    }
+
+    // Try to open settings file
+    HANDLE file = CreateFileW(settingsPath, GENERIC_READ, FILE_SHARE_READ, NULL, 
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) {
+        return TRUE;  // File doesn't exist yet, use defaults
+    }
+
+    // Read file content
+    DWORD fileSize = GetFileSize(file, NULL);
+    if (fileSize == 0 || fileSize > 65536) {  // Sanity check: max 64KB
+        CloseHandle(file);
+        return TRUE;  // Use defaults
+    }
+
+    char *buffer = (char *)HeapAlloc(GetProcessHeap(), 0, fileSize + 1);
+    if (!buffer) {
+        CloseHandle(file);
         return TRUE;
     }
 
-    // Read all settings using helpers
-    DWORD wordWrap = 0;
-    if (RegReadDword(hKey, REG_WORDWRAP, &wordWrap)) {
-        settings->wordWrap = (wordWrap != 0);
+    DWORD read = 0;
+    if (!ReadFile(file, buffer, fileSize, &read, NULL)) {
+        HeapFree(GetProcessHeap(), 0, buffer);
+        CloseHandle(file);
+        return TRUE;
+    }
+    buffer[read] = '\0';
+    CloseHandle(file);
+
+    // Parse JSON manually (simple key-value pairs)
+    char *pos = buffer;
+    while ((pos = strstr(pos, "\"")) != NULL) {
+        pos++;  // Skip opening quote
+        
+        if (strncmp(pos, "wordWrap", 8) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                char *end = strchr(val, ',');
+                if (!end) end = strchr(val, '}');
+                settings->wordWrap = (end && strstr(val, "true") && strstr(val, "true") < end);
+            }
+        }
+        else if (strncmp(pos, "statusVisible", 13) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                char *end = strchr(val, ',');
+                if (!end) end = strchr(val, '}');
+                settings->statusVisible = (end && strstr(val, "true") && strstr(val, "true") < end);
+            }
+        }
+        else if (strncmp(pos, "autosaveEnabled", 15) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                char *end = strchr(val, ',');
+                if (!end) end = strchr(val, '}');
+                settings->autosaveEnabled = (end && strstr(val, "true") && strstr(val, "true") < end);
+            }
+        }
+        else if (strncmp(pos, "autosaveInterval", 16) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                int interval = atoi(val + 1);
+                if (interval >= 5 && interval <= 3600) {
+                    settings->autosaveInterval = (DWORD)interval;
+                }
+            }
+        }
+        else if (strncmp(pos, "darkModeEnabled", 15) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                char *end = strchr(val, ',');
+                if (!end) end = strchr(val, '}');
+                settings->darkModeEnabled = (end && strstr(val, "true") && strstr(val, "true") < end);
+            }
+        }
+        else if (strncmp(pos, "encoding", 8) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                int enc = atoi(val + 1);
+                if (enc >= ENC_UTF8 && enc <= ENC_ANSI) {
+                    settings->encoding = (TextEncoding)enc;
+                }
+            }
+        }
     }
 
-    DWORD statusBar = 1;
-    if (RegReadDword(hKey, REG_STATUSBAR, &statusBar)) {
-        settings->statusVisible = (statusBar != 0);
-    }
-
-    DWORD autosave = 0;
-    if (RegReadDword(hKey, REG_AUTOSAVE, &autosave)) {
-        settings->autosaveEnabled = (autosave != 0);
-    }
-
-    DWORD interval = 30;
-    if (RegReadDword(hKey, REG_AUTOSAVE_INT, &interval)) {
-        settings->autosaveInterval = interval;
-    }
-
-    DWORD darkMode = 0;
-    if (RegReadDword(hKey, REG_DARKMODE, &darkMode)) {
-        settings->darkModeEnabled = (darkMode != 0);
-    }
-
-    DWORD encoding = ENC_UTF8;
-    if (RegReadDword(hKey, REG_ENCODING, &encoding)) {
-        settings->encoding = (TextEncoding)encoding;
-    }
-
-    RegCloseKey(hKey);
+    HeapFree(GetProcessHeap(), 0, buffer);
     return TRUE;
 }
 
 BOOL SaveAppSettings(const AppSettings *settings) {
     if (!settings) return FALSE;
 
-    HKEY hKey = NULL;
-    DWORD disposition = 0;
-
-    // Create or open the registry key
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, RETROPAD_REG_PATH, 0, NULL, REG_OPTION_NON_VOLATILE, 
-                        KEY_WRITE, NULL, &hKey, &disposition) != ERROR_SUCCESS) {
+    WCHAR settingsPath[MAX_PATH];
+    if (!GetSettingsPath(settingsPath, MAX_PATH)) {
         return FALSE;
     }
 
-    // Write all settings using helpers
-    DWORD wordWrap = settings->wordWrap ? 1 : 0;
-    if (!RegWriteDword(hKey, REG_WORDWRAP, wordWrap)) {
-        RegCloseKey(hKey);
+    // Create JSON content
+    char json[512];
+    StringCchPrintfA(json, 512,
+        "{\r\n"
+        "  \"wordWrap\": %s,\r\n"
+        "  \"statusVisible\": %s,\r\n"
+        "  \"autosaveEnabled\": %s,\r\n"
+        "  \"autosaveInterval\": %u,\r\n"
+        "  \"darkModeEnabled\": %s,\r\n"
+        "  \"encoding\": %d\r\n"
+        "}\r\n",
+        settings->wordWrap ? "true" : "false",
+        settings->statusVisible ? "true" : "false",
+        settings->autosaveEnabled ? "true" : "false",
+        settings->autosaveInterval,
+        settings->darkModeEnabled ? "true" : "false",
+        (int)settings->encoding
+    );
+
+    // Write to file
+    HANDLE file = CreateFileW(settingsPath, GENERIC_WRITE, 0, NULL, 
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) {
         return FALSE;
     }
 
-    DWORD statusBar = settings->statusVisible ? 1 : 0;
-    if (!RegWriteDword(hKey, REG_STATUSBAR, statusBar)) {
-        RegCloseKey(hKey);
-        return FALSE;
-    }
-
-    DWORD autosave = settings->autosaveEnabled ? 1 : 0;
-    if (!RegWriteDword(hKey, REG_AUTOSAVE, autosave)) {
-        RegCloseKey(hKey);
-        return FALSE;
-    }
-
-    DWORD interval = settings->autosaveInterval;
-    if (!RegWriteDword(hKey, REG_AUTOSAVE_INT, interval)) {
-        RegCloseKey(hKey);
-        return FALSE;
-    }
-
-    DWORD darkMode = settings->darkModeEnabled ? 1 : 0;
-    if (!RegWriteDword(hKey, REG_DARKMODE, darkMode)) {
-        RegCloseKey(hKey);
-        return FALSE;
-    }
-
-    DWORD encoding = (DWORD)settings->encoding;
-    if (!RegWriteDword(hKey, REG_ENCODING, encoding)) {
-        RegCloseKey(hKey);
-        return FALSE;
-    }
-
-    RegCloseKey(hKey);
-    return TRUE;
+    DWORD written = 0;
+    BOOL ok = WriteFile(file, json, (DWORD)strlen(json), &written, NULL);
+    CloseHandle(file);
+    return ok;
 }
