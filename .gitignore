@@ -1,0 +1,113 @@
+# Build artifacts
+build/
+bin/
+obj/
+out/
+dist/
+
+# Release packages - ignore directory contents but allow zip files
+release/*
+!release/retropad-*.zip
+*.tar.gz
+*.7z
+
+# Compiled executables and object files
+*.exe
+*.dll
+*.lib
+*.obj
+*.res
+*.exp
+*.pdb
+*.ilk
+*.o
+*.a
+*.so
+*.htm
+
+# Visual Studio
+.vs/
+.vscode/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.VC.opendb
+.visualstudio/
+UpgradeLog*.htm
+UpgradeLog*.XML
+
+# GitHub
+.github/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# IDE and Editor files
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode/settings.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+.clangd
+.ccls
+compile_commands.json
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.swp
+*.[oa]
+*~
+\#*\#
+.\#*
+*.log
+*.out
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Development artifacts
+*.asm
+*.map
+*.cod
+*.lst
+
+# NuGet
+packages/
+.nuget/
+
+# Git-related
+*.patch
+*.diff
+
+# Documentation build artifacts
+docs/_build/
+docs/.buildinfo
+
+# Version control merge files
+*.BACKUP.*
+*.BASE.*
+*.CURRENT.*
+*.REMOTE.*
+*.orig
