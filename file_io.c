@@ -3,6 +3,8 @@
 #include <commdlg.h>
 #include <strsafe.h>
 #include <stdlib.h>
+#include <shlobj.h>
+#include <string.h>
 
 static TextEncoding DetectEncoding(const BYTE *data, DWORD size) {
     if (size >= 2 && data[0] == 0xFF && data[1] == 0xFE) {
@@ -14,7 +16,11 @@ static TextEncoding DetectEncoding(const BYTE *data, DWORD size) {
     if (size >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
         return ENC_UTF8;
     }
-    // Assume UTF-8 if it converts cleanly, else ANSI
+    // Handle empty file
+    if (size == 0) {
+        return ENC_UTF8;
+    }
+    // Try UTF-8 first, fall back to ANSI if invalid
     int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (LPCSTR)data, size, NULL, 0);
     return (wlen > 0) ? ENC_UTF8 : ENC_ANSI;
 }
@@ -148,6 +154,9 @@ static BOOL WriteUTF8WithBOM(HANDLE file, const WCHAR *text, size_t length) {
     if (!WriteFile(file, bom, sizeof(bom), &written, NULL)) {
         return FALSE;
     }
+    // Empty text is valid - just write BOM and return success
+    if (length == 0) return TRUE;
+    
     int bytes = WideCharToMultiByte(CP_UTF8, 0, text, (int)length, NULL, 0, NULL, NULL);
     if (bytes <= 0) return FALSE;
     BYTE *buffer = (BYTE *)HeapAlloc(GetProcessHeap(), 0, bytes);
@@ -168,6 +177,9 @@ static BOOL WriteUTF16LE(HANDLE file, const WCHAR *text, size_t length) {
 }
 
 static BOOL WriteANSI(HANDLE file, const WCHAR *text, size_t length) {
+    // Empty text is valid - just return success
+    if (length == 0) return TRUE;
+    
     int bytes = WideCharToMultiByte(CP_ACP, 0, text, (int)length, NULL, 0, NULL, NULL);
     if (bytes <= 0) return FALSE;
     BYTE *buffer = (BYTE *)HeapAlloc(GetProcessHeap(), 0, bytes);
@@ -240,4 +252,170 @@ BOOL SaveFileDialog(HWND owner, WCHAR *pathOut, DWORD pathLen) {
         StringCchCopyW(pathOut, pathLen, L"Untitled.txt");
     }
     return GetSaveFileNameW(&ofn);
+}
+
+// Settings persistence using JSON file in AppData
+// Helper to get settings file path in %APPDATA%\retropad\settings.json
+static BOOL GetSettingsPath(WCHAR *pathOut, DWORD pathLen) {
+    // Get %APPDATA% path
+    WCHAR appdata[MAX_PATH];
+    if (FAILED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
+        return FALSE;
+    }
+    
+    // Create retropad directory
+    WCHAR retropadDir[MAX_PATH];
+    StringCchPrintfW(retropadDir, MAX_PATH, L"%s\\retropad", appdata);
+    CreateDirectoryW(retropadDir, NULL);  // Create if doesn't exist (ignore error if exists)
+    
+    // Build settings file path
+    StringCchPrintfW(pathOut, pathLen, L"%s\\settings.json", retropadDir);
+    return TRUE;
+}
+
+BOOL LoadAppSettings(AppSettings *settings) {
+    if (!settings) return FALSE;
+
+    // Initialize with defaults
+    settings->wordWrap = FALSE;
+    settings->statusVisible = TRUE;
+    settings->autosaveEnabled = FALSE;
+    settings->autosaveInterval = 30;  // 30 seconds default
+    settings->darkModeEnabled = FALSE;
+    settings->encoding = ENC_UTF8;
+    settings->modified = FALSE;
+
+    WCHAR settingsPath[MAX_PATH];
+    if (!GetSettingsPath(settingsPath, MAX_PATH)) {
+        return TRUE;  // Use defaults
+    }
+
+    // Try to open settings file
+    HANDLE file = CreateFileW(settingsPath, GENERIC_READ, FILE_SHARE_READ, NULL, 
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) {
+        return TRUE;  // File doesn't exist yet, use defaults
+    }
+
+    // Read file content
+    DWORD fileSize = GetFileSize(file, NULL);
+    if (fileSize == 0 || fileSize > 65536) {  // Sanity check: max 64KB
+        CloseHandle(file);
+        return TRUE;  // Use defaults
+    }
+
+    char *buffer = (char *)HeapAlloc(GetProcessHeap(), 0, fileSize + 1);
+    if (!buffer) {
+        CloseHandle(file);
+        return TRUE;
+    }
+
+    DWORD read = 0;
+    if (!ReadFile(file, buffer, fileSize, &read, NULL)) {
+        HeapFree(GetProcessHeap(), 0, buffer);
+        CloseHandle(file);
+        return TRUE;
+    }
+    buffer[read] = '\0';
+    CloseHandle(file);
+
+    // Parse JSON manually (simple key-value pairs)
+    char *pos = buffer;
+    while ((pos = strstr(pos, "\"")) != NULL) {
+        pos++;  // Skip opening quote
+        
+        if (strncmp(pos, "wordWrap", 8) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                char *end = strchr(val, ',');
+                if (!end) end = strchr(val, '}');
+                settings->wordWrap = (end && strstr(val, "true") && strstr(val, "true") < end);
+            }
+        }
+        else if (strncmp(pos, "statusVisible", 13) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                char *end = strchr(val, ',');
+                if (!end) end = strchr(val, '}');
+                settings->statusVisible = (end && strstr(val, "true") && strstr(val, "true") < end);
+            }
+        }
+        else if (strncmp(pos, "autosaveEnabled", 15) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                char *end = strchr(val, ',');
+                if (!end) end = strchr(val, '}');
+                settings->autosaveEnabled = (end && strstr(val, "true") && strstr(val, "true") < end);
+            }
+        }
+        else if (strncmp(pos, "autosaveInterval", 16) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                int interval = atoi(val + 1);
+                if (interval >= 5 && interval <= 3600) {
+                    settings->autosaveInterval = (DWORD)interval;
+                }
+            }
+        }
+        else if (strncmp(pos, "darkModeEnabled", 15) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                char *end = strchr(val, ',');
+                if (!end) end = strchr(val, '}');
+                settings->darkModeEnabled = (end && strstr(val, "true") && strstr(val, "true") < end);
+            }
+        }
+        else if (strncmp(pos, "encoding", 8) == 0) {
+            char *val = strstr(pos, ":");
+            if (val) {
+                int enc = atoi(val + 1);
+                if (enc >= ENC_UTF8 && enc <= ENC_ANSI) {
+                    settings->encoding = (TextEncoding)enc;
+                }
+            }
+        }
+    }
+
+    HeapFree(GetProcessHeap(), 0, buffer);
+    return TRUE;
+}
+
+BOOL SaveAppSettings(const AppSettings *settings) {
+    if (!settings) return FALSE;
+
+    WCHAR settingsPath[MAX_PATH];
+    if (!GetSettingsPath(settingsPath, MAX_PATH)) {
+        return FALSE;
+    }
+
+    // Create JSON content
+    char json[512];
+    StringCchPrintfA(json, 512,
+        "{\r\n"
+        "  \"wordWrap\": %s,\r\n"
+        "  \"statusVisible\": %s,\r\n"
+        "  \"autosaveEnabled\": %s,\r\n"
+        "  \"autosaveInterval\": %u,\r\n"
+        "  \"darkModeEnabled\": %s,\r\n"
+        "  \"encoding\": %d\r\n"
+        "}\r\n",
+        settings->wordWrap ? "true" : "false",
+        settings->statusVisible ? "true" : "false",
+        settings->autosaveEnabled ? "true" : "false",
+        settings->autosaveInterval,
+        settings->darkModeEnabled ? "true" : "false",
+        (int)settings->encoding
+    );
+
+    // Write to file
+    HANDLE file = CreateFileW(settingsPath, GENERIC_WRITE, 0, NULL, 
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) {
+        return FALSE;
+    }
+
+    DWORD written = 0;
+    BOOL ok = WriteFile(file, json, (DWORD)strlen(json), &written, NULL);
+    CloseHandle(file);
+    return ok;
 }
