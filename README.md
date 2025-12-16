@@ -6,11 +6,11 @@ Welcome to **retropad** - a lightweight, feature-rich text editor for Windows!
 
 ## Getting Started
 
-### Installation
-1. Download `retropad-1.1.0.zip`
-2. Extract to your desired location (e.g., `C:\Program Files\retropad`)
-3. Run `retropad.exe`
-4. (Optional) Create a Windows Start Menu shortcut
+## Get the code
+```bat
+git clone https://github.com/PlummersSoftwareLLC/retropad.git
+cd retropad
+```
 
 **No installation required** - retropad is fully portable!
 
